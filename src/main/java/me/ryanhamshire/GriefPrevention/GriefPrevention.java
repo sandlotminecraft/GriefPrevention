@@ -29,6 +29,8 @@ import me.ryanhamshire.GriefPrevention.events.TrustChangedEvent;
 import me.ryanhamshire.GriefPrevention.metrics.MetricsHandler;
 import me.ryanhamshire.GriefPrevention.platform.entitybreak.EntityBreakProtectionListener;
 import me.ryanhamshire.GriefPrevention.platform.knockback.KnockbackProtectionListener;
+import me.ryanhamshire.GriefPrevention.trustee.TrusteeProvider;
+import me.ryanhamshire.GriefPrevention.trustee.Trustees;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.BanList;
 import org.bukkit.BanList.Type;
@@ -1694,7 +1696,15 @@ public class GriefPrevention extends JavaPlugin
             //determine whether a single player or clearing permissions entirely
             boolean clearPermissions = false;
             OfflinePlayer otherPlayer = null;
-            if (args[0].equals("all"))
+            String trusteeKey = null;
+            TrusteeProvider trusteeProvider = Trustees.providerFor(args[0]);
+            if (trusteeProvider != null)
+            {
+                trusteeKey = resolveTrustee(trusteeProvider, player, args[0]);
+                if (trusteeKey == null) return true;
+                args[0] = trustEntryToPlayerName(trusteeKey);
+            }
+            else if (args[0].equals("all"))
             {
                 if (claim == null || claim.checkPermission(player, ClaimPermission.Edit, null) == null)
                 {
@@ -1741,6 +1751,10 @@ public class GriefPrevention extends JavaPlugin
                 if (otherPlayer != null)
                 {
                     idToDrop = otherPlayer.getUniqueId().toString();
+                }
+                else if (trusteeKey != null)
+                {
+                    idToDrop = trusteeKey;
                 }
 
                 //calling event
@@ -1828,6 +1842,10 @@ public class GriefPrevention extends JavaPlugin
                     if (otherPlayer != null)
                     {
                         idToDrop = otherPlayer.getUniqueId().toString();
+                    }
+                    else if (trusteeKey != null)
+                    {
+                        idToDrop = trusteeKey;
                     }
                     boolean targetIsManager = claim.managers.contains(idToDrop);
                     if (targetIsManager && claim.checkPermission(player, ClaimPermission.Edit, null) != null)  //only claim owners can untrust managers
@@ -3016,16 +3034,33 @@ public class GriefPrevention extends JavaPlugin
     public enum IgnoreMode
     {None, StandardIgnore, AdminIgnore}
 
-    private String trustEntryToPlayerName(String entry)
+    static String trustEntryToPlayerName(String entry)
     {
         if (entry.startsWith("[") || entry.equals("public"))
         {
             return entry;
         }
+        String display = Trustees.display(entry);
+        if (display != null)
+        {
+            return display;
+        }
         else
         {
             return GriefPrevention.lookupPlayerName(entry);
         }
+    }
+
+    //resolves a <prefix>:<input> trust argument through its TrusteeProvider, or tells the player it names nothing
+    private static @Nullable String resolveTrustee(TrusteeProvider provider, Player player, String argument)
+    {
+        String key = Trustees.resolve(provider, player, argument);
+        if (key == null)
+        {
+            String input = Trustees.input(argument);
+            GriefPrevention.sendMessage(player, TextMode.Err, (input.isEmpty() ? argument : input) + " is not a " + provider.prefix() + ".");
+        }
+        return key;
     }
 
     public static String getfriendlyLocationString(Location location)
@@ -3100,7 +3135,15 @@ public class GriefPrevention extends JavaPlugin
         String permission = null;
         OfflinePlayer otherPlayer = null;
         UUID recipientID = null;
-        if (recipientName.startsWith("[") && recipientName.endsWith("]"))
+        String trusteeKey = null;
+        TrusteeProvider trusteeProvider = Trustees.providerFor(recipientName);
+        if (trusteeProvider != null)
+        {
+            trusteeKey = resolveTrustee(trusteeProvider, player, recipientName);
+            if (trusteeKey == null) return;
+            recipientName = trustEntryToPlayerName(trusteeKey);
+        }
+        else if (recipientName.startsWith("[") && recipientName.endsWith("]"))
         {
             permission = recipientName.substring(1, recipientName.length() - 1);
             if (permission == null || permission.isEmpty())
@@ -3193,7 +3236,11 @@ public class GriefPrevention extends JavaPlugin
         }
 
         String identifierToAdd = recipientName;
-        if (permission != null)
+        if (trusteeKey != null)
+        {
+            identifierToAdd = trusteeKey;
+        }
+        else if (permission != null)
         {
             identifierToAdd = "[" + permission + "]";
             //replace recipientName as well so the success message clearly signals a permission

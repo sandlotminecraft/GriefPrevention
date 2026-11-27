@@ -19,6 +19,7 @@
 package me.ryanhamshire.GriefPrevention;
 
 import me.ryanhamshire.GriefPrevention.events.ClaimPermissionCheckEvent;
+import me.ryanhamshire.GriefPrevention.trustee.Trustees;
 import me.ryanhamshire.GriefPrevention.util.BoundingBox;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -433,6 +434,8 @@ public class Claim
         {
             for (String node : this.managers)
             {
+                // Keys owned by a registered TrusteeProvider - <prefix>:<id>
+                if (Trustees.isMember(player, node)) return true;
                 // Ensure valid permission format for permissions - [permission.node]
                 if (node.length() < 3 || node.charAt(0) != '[' || node.charAt(node.length() - 1) != ']') continue;
                 // Check if player has node
@@ -445,6 +448,8 @@ public class Claim
         for (Map.Entry<String, ClaimPermission> stringToPermission : this.playerIDToClaimPermissionMap.entrySet())
         {
             String node = stringToPermission.getKey();
+            // Keys owned by a registered TrusteeProvider - <prefix>:<id>
+            if (level.isGrantedBy(stringToPermission.getValue()) && Trustees.isMember(player, node)) return true;
             // Ensure valid permission format for permissions - [permission.node]
             if (node.length() < 3 || node.charAt(0) != '[' || node.charAt(node.length() - 1) != ']') continue;
 
